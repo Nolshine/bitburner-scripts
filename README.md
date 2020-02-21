@@ -1,5 +1,5 @@
 # bitburner-scripts
-just my collection of tools for the hacking game BitBurner.
+just my collection of tools for the hacking game [BitBurner.](https://danielyxie.github.io/bitburner/)
 
 ## early game
 early game I just use the early-hack-template script from the tutorial, for the most part.
