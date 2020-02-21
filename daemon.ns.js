@@ -101,9 +101,15 @@ async function maximizeCash(ns, target, reserved_ram) {
         // growthAnalyze will return stuff like Infinity in those cases.
         // so we can just skip all of that if money's at zero (which, ideally, it shouldn't be.)
         // mistakes happen.
-        let t_weaken_actual = Math.floor(threads/13)
-        let t_grow_actual = t_weaken_actual * 12;
-            
+        let t_weaken_actual;
+        let t_grow_actual;
+        if (threads < 13) {
+            t_weaken_actual = 1;
+            t_grow_actual = threads-1;
+        } else {
+            t_weaken_actual = Math.floor(threads/13)
+            t_grow_actual = t_weaken_actual * 12;
+        }
         // if the needed threads for both grow and weaken are more than the threads we have,
         // we need to divvy up the threads we can use such that we use all available threads
         // while still running enough weaken() threads to keep security level down.
