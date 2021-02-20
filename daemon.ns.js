@@ -1,10 +1,8 @@
 /*
-25 hack threads to every weaken thread
-12.5 grow threads to every weaken thread
-
-if waiting for a weaken call with every grow/hack call, can use a full 25 hack or 12 grow per weaken
-
-NOTES:
+    25 hack threads to every weaken thread
+    12.5 grow threads to every weaken thread
+    if waiting for a weaken call with every grow/hack call, can use a full 25 hack or 12 grow per weaken
+    NOTES:
     Right now the script will just decide how much ram it can work with at the start, and keep with that value.
     that could cause some problems; For one, it means that if ram is really low at runtime, it'll think it has
     less ram than it could use. Secondly, it could lead to situations where multiple daemons are running and
@@ -12,6 +10,7 @@ NOTES:
     the first daemon thinks it has, which will lead to crashing out due to low ram.
     
     the fix is to check for ram every cycle in all stages. Will fix eventually.
+    **actually, maybe I already fixed it?**
 */
 
 export async function main(ns) {
@@ -20,7 +19,13 @@ export async function main(ns) {
     
     // target argument validation
     if (!target || !ns.serverExists(target)) {
-        ns.tprint("ERROR: Invalid argument target ($ run daemon.ns <target>)");
+        ns.tprint("ERROR: Invalid argument target ($ run daemon.ns \<target\> \<reserved_ram\>)");
+        return;
+    }
+    
+    else if (!reserved_ram || typeof(reserved_ram) != "number") {
+        ns.tprint("ERROR: Invalid argument reserved_ram ($ run daemon.ns \<target\> \<reserved_ram\>)");
+        ns.tprint("Must be numeric.")
         return;
     }
     
@@ -29,7 +34,7 @@ export async function main(ns) {
         return;
     }
     else if (ns.getServerRequiredHackingLevel(target) > ns.getHackingLevel()) {
-        ns.tprint("ERROR: target hack level requirement too high");
+        ns.tprint("ERROR: target hack level requirement too high (" + target + ", " + ns.getServerRequiredHackingLevel(target) + ")");
         return;
     }
 
@@ -147,6 +152,7 @@ async function startHack(ns, target, reserved_ram) {
     } else {
         t_hack = Math.floor(threads/26)*25;
         t_weaken = Math.floor(threads/26);
+        t_weaken = Math.max(1, t_weaken); // Not sure if this is needed
     }
     // determine how many threads are needed
     // 10% of max money...
@@ -154,12 +160,18 @@ async function startHack(ns, target, reserved_ram) {
     let t_hack_needed = Math.ceil(ns.hackAnalyzeThreads(target, money_to_hack));
     // use smaller of needed hack threads or available hack 
     let t_hack_actual = Math.min(t_hack_needed, t_hack);
+    let t_weaken_needed = Math.ceil(t_hack_actual/25);
+    // use smaller of weaken threads needed or available weaken
+    let t_weaken_actual = Math.min(t_weaken_needed, t_weaken);
     
-    // we can just use as many weaken threads as we want, so proceed to hack
+    // we can just use as many weaken threads as we want, so proceed to hack <-- wtf?
+    // leaving this absolutely ludicrous comment for posterity. We should NOT be using
+    // "as many weaken threads as we want". We should use either the amount needed,
+    // or the amount possible per batch, whichever is smaller.
     // the basic premise is to either skim only 10% or as much as possible, whichever is smaller
     let wait_time = (ns.getWeakenTime(target)*1000)+2000;
     ns.run("hack.script", t_hack_actual, target);
-    ns.run("weaken.script", t_weaken, target);
+    ns.run("weaken.script", t_weaken_actual, target);
     await ns.sleep(wait_time);
 }
 
