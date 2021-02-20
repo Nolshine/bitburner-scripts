@@ -1,4 +1,5 @@
 // propagate daemon.ns and associated tool scripts to all rooted server
+// TODO: add option to include player-owned servers instead of ignoring
 
 export async function main(ns) {
     let visited = ["home"];
@@ -17,7 +18,6 @@ export async function main(ns) {
         visited.push(node);
         if(ns.hasRootAccess(node)) {
             ns.scp("daemon.ns", node);
-            ns.scp("util.ns", node);
             ns.scp("hack.script", node);
             ns.scp("grow.script", node);
             ns.scp("weaken.script", node);
