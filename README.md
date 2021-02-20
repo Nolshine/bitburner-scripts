@@ -13,6 +13,3 @@ note: informatics.js looks like an early daemon.ns, it's obsolete, may get delet
 
 ## bitnode stage
 Will upload whatever tools I make for that stage when I get around to it.
-
-## notes
-spidercrack.ns is obsolete, use open_sesame.ns
