@@ -12,7 +12,8 @@
 
 let sv_library = {
     "list" : listPrices,
-    "buy" : attemptPurchase
+    "buy" : attemptPurchase,
+    "delete" : attemptDelete
 };
 
 export async function main(ns){
@@ -52,5 +53,19 @@ function attemptPurchase(ns, args) {
         }
     }
     ns.tprint("ERROR: Too many servers bought, delete one first.");
+    return;
+}
+
+function attemptDelete(ns, args) {
+    let target = args[0];
+    if(!target) {
+        ns.tprint("ERROR: Required argument targer_server not found.");
+        return;
+    }
+    else if(!ns.serverExists(target)){
+        ns.tprint("ERROR: No such server exists.");
+        return;
+    }
+    ns.deleteServer(target);
     return;
 }
