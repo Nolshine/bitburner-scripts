@@ -11,9 +11,10 @@
 // better inform you about how much ram to aim for early-game.
 
 let sv_library = {
+    "help" : printHelp,
     "list" : listPrices,
     "buy" : attemptPurchase,
-    "delete" : attemptDelete
+    "del" : attemptDelete,
 };
 
 export async function main(ns){
@@ -68,4 +69,12 @@ function attemptDelete(ns, args) {
     }
     ns.deleteServer(target);
     return;
+}
+
+function printHelp(ns, args) {
+    ns.tprint("Current valid cli flags are:");
+    ns.tprint("  help          - displays this helpfile.");
+    ns.tprint("  list          - displays server prices per ram amount (in powers of 2)");
+    ns.tprint("  buy           - takes a num argument, attempts to buy a server.");
+    ns.tprint("  del           - takes a str argument, attempts to delete an existing server.");
 }
