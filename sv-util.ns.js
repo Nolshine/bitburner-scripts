@@ -1,33 +1,31 @@
-// a collection of utilities for interacting with
-// and managing purchased servers manually.
-//
-// the main purpose of this library is to help with
-// the early game, where you want to be strategic
-// with server purchases.
-//
-// it can be completely ignored, especially if how you decide
-// to buy servers is by starting from a very generous amount of ram...
-// but you can also find out pricing using this library, which may
-// better inform you about how much ram to aim for early-game.
-
-let sv_library = {
-    "help" : printHelp,
-    "list" : listPrices,
-    "buy" : attemptPurchase,
-    "del" : attemptDelete,
-};
-
+/** @param {NS} ns */
 export async function main(ns){
-    if (!ns.args[0] || !sv_library.hasOwnProperty(ns.args[0])){
+    var commands = {
+        "help": printHelp,
+        "list": listPrices,
+        "buy": tryBuy,
+        "del": tryDel,
+    };
+
+    if (!ns.args[0] || !commands.hasOwnProperty(ns.args[0])){
         ns.tprint("ERROR: Empty or invalid function argument.\nUsage: `$ run sv-util.ns [function]`");
         return;
     }
+
     let args = ns.args.slice(1);
-    sv_library[ns.args[0]](ns, args);
+    commands[ns.args[0]](ns, args);
     return;
 }
 
-function listPrices(ns, args) {
+function printHelp(ns, args){
+    ns.tprint("Current valid cli flags are:");
+    ns.tprint("  help          - displays this helpfile.");
+    ns.tprint("  list          - displays server prices per ram amount (in powers of 2)");
+    ns.tprint("  buy           - takes a num argument, attempts to buy a server.");
+    ns.tprint("  del           - takes a str argument, attempts to delete an existing server.");
+}
+
+function listPrices(ns, args){
     var formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
     for (let exp = 1; exp <= 20; exp++) {
         let ram = Math.pow(2, exp);
@@ -36,7 +34,7 @@ function listPrices(ns, args) {
     }
 }
 
-function attemptPurchase(ns, args) {
+function tryBuy(ns, args){
     let ram = args[0];
     if (!ram) {
         ns.tprint("ERROR: Required argument RAM not found.");
@@ -50,6 +48,7 @@ function attemptPurchase(ns, args) {
                 return;
             }
             ns.purchaseServer(sv, ram);
+            ns.tprint("Bought server named: " + sv + " with " + ram + "GB RAM.");
             return;
         }
     }
@@ -57,7 +56,7 @@ function attemptPurchase(ns, args) {
     return;
 }
 
-function attemptDelete(ns, args) {
+function tryDel(ns, args){
     let target = args[0];
     if(!target) {
         ns.tprint("ERROR: Required argument targer_server not found.");
@@ -68,13 +67,6 @@ function attemptDelete(ns, args) {
         return;
     }
     ns.deleteServer(target);
+    ns.tprint("Deleted server: " + target);
     return;
-}
-
-function printHelp(ns, args) {
-    ns.tprint("Current valid cli flags are:");
-    ns.tprint("  help          - displays this helpfile.");
-    ns.tprint("  list          - displays server prices per ram amount (in powers of 2)");
-    ns.tprint("  buy           - takes a num argument, attempts to buy a server.");
-    ns.tprint("  del           - takes a str argument, attempts to delete an existing server.");
 }
