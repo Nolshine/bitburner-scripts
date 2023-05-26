@@ -25,13 +25,15 @@ export async function main(ns) {
 		let t_hack = Math.floor(ns.hackAnalyzeThreads(target, hack_amount));
 		let hack_percent = t_hack * ns.hackAnalyze(target);
 		let t_grow;
+		let post_hack_amount = max_cash * (1-hack_percent);
 		if (ns.fileExists('Formulas.exe', 'home')){
 			let mock = ns.getServer(target);
-			mock.moneyAvailable = max_cash * (1-hack_percent);
+			mock.moneyAvailable = post_hack_amount;
 			t_grow = Math.ceil(ns.formulas.hacking.growThreads(mock, ns.getPlayer(), max_cash))
 		}
 		else {
-			t_grow = Math.ceil(ns.growthAnalyze(target, 1.0+hack_percent));
+			let factor = max_cash / post_hack_amount;
+			t_grow = Math.ceil(ns.growthAnalyze(target, factor));
 		}
 		let tw_hack = Math.ceil(t_hack/25); // # of weaken threads for hack task
 		let tw_grow = Math.ceil(t_grow/12.5); // # of weaken threads for grow task
@@ -147,11 +149,12 @@ function getServers(ns){
 	let valid = visited.filter((sv) => ns.getServerMaxRam(sv) > 0 &&
 	ns.hasRootAccess(sv) === true);
 	let result = [];
+	let per_script_ram = ns.getScriptRam('weak.js', 'home');
 	for (const sv of valid) {
 		let sv_pair = [sv];
 		let ram = ns.getServerMaxRam(sv);
 		ram = ram-ns.getServerUsedRam(sv);
-		let t = Math.floor(ram/1.75);
+		let t = Math.floor(ram/per_script_ram);
 		sv_pair.push(t);
 		if (t > 0) {
 			result.push(sv_pair);
