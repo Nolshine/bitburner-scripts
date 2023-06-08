@@ -1,3 +1,4 @@
+/** @param {NS} ns */
 // find path to specific server
 export async function main(ns) {
     if (!ns.args[0]) {
@@ -10,8 +11,9 @@ export async function main(ns) {
         return;
     }
     ns.tprint("Starting at origin: " + ns.getHostname());
-    ns.tprint(traverse(ns, ns.getHostname(), target));
-    return;
+    let path = traverse(ns, ns.getHostname(), target);
+		path[0] = 'connect '+path[0];
+		ns.tprint(path.join('; connect '));
 }
 
 
@@ -32,29 +34,22 @@ function traverse(ns, origin, target, cur_path=[]) {
     //
     // At least I think that's what's going on...
     let path = cur_path.slice();
-    // add origin to the path
     path.push(origin);
     // if 'origin' is equal to 'target', we're done! return the path
     ns.print(path);
     if (origin == target){
-        return path;
+        return path.slice(1);
     }
     
     let nodes = ns.scan(origin); // first, scan all connections from 'origin'.
-    
-    // if there are no further connections at this stage, the function fails.
-    if (nodes.length === 0){
+    if (nodes.length === 0){ // fail if there's nowhere to go.
         ns.print("failing because there is no possible path.");
         return -1;
     }
     
-    // for every connection found...
     while (nodes.length !== 0) {
-        // take a connection out of 'nodes' and store it locally.
         let node = nodes.pop();
-        // check if connection has been visited before.
         if (path.includes(node)){
-            // we've already checked this connection, move on to the next one.
             continue;
         } else {
             let new_path = traverse(ns, node, target, path);
