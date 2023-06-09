@@ -6,7 +6,8 @@
 export async function main(ns) {
 	// TODO put all variable declarations at the top for readability
 	
-	let pid = ns.pid;
+	let port = ns.getPortHandle(ns.pid);
+	port.clear();
 	let target = ns.args[0];
 	let theft_percent;
 	if (ns.args[1]) {
@@ -67,9 +68,9 @@ export async function main(ns) {
 		let weak_time = hack_time * 4;
 		let now = Date.now()
 		let weak2_end = now + weak_time + (spacer*3);
-		let grow_end = weak2_end - 20;
-		let weak1_end = grow_end - 20;
-		let hack_end = weak1_end - 20;
+		let grow_end = weak2_end - spacer;
+		let weak1_end = grow_end - spacer;
+		let hack_end = weak1_end - spacer;
 		
 		// make sure the worker scripts are available on the hosts
 		ns.scp('hack.js', hack_sv, 'home');
@@ -79,36 +80,17 @@ export async function main(ns) {
 		// TODO: maybe just have a different tool propagate all the worker
 		// scripts to every server on the network or something for
 		// convenience?
-		let hack_job = JSON.stringify({
-			'target': target,
-			'time': hack_time,
-			'end': hack_end,
-			'type': 'hack',
-		});
-		ns.exec('hack.js', hack_sv, t_hack, hack_job, pid);
-		let weak1_job = JSON.stringify({
-			'target': target,
-			'time': weak_time,
-			'end': weak1_end,
-			'type': 'weak1',
-		});
-		ns.exec('weak.js', weak1_sv, tw_hack, weak1_job, pid);
-		let grow_job = JSON.stringify({
-			'target': target,
-			'time': grow_time,
-			'end': grow_end,
-			'type': 'grow',
-		});
-		ns.exec('grow.js', grow_sv, t_grow, grow_job, pid);
-		let weak2_job = JSON.stringify({
-			'target': target,
-			'time': weak_time,
-			'end': weak2_end,
-			'type': 'weak2',
-		});
-		ns.exec('weak.js', weak2_sv, tw_grow, weak2_job, pid);
+		let hack_job = JSON.stringify(getJob(ns, target, hack_time, hack_end, 'hack'));
+		ns.exec('hack.js', hack_sv, t_hack, hack_job);
+		let weak1_job = JSON.stringify(getJob(ns, target, weak_time, weak1_end, 'weak1'));
+		ns.exec('weak.js', weak1_sv, tw_hack, weak1_job);
+		let grow_job = JSON.stringify(getJob(ns, target, grow_time, grow_end, 'grow'));
+		ns.exec('grow.js', grow_sv, t_grow, grow_job);
+		let weak2_job = JSON.stringify(getJob(ns, target, weak_time, weak2_end, 'weak2'));
+		ns.exec('weak.js', weak2_sv, tw_grow, weak2_job);
 
-		await ns.sleep(weak_time + 5*spacer);
+		await port.nextWrite();
+		port.read();
 		
 		ns.tprint(`
 		target server status:
@@ -116,6 +98,16 @@ export async function main(ns) {
 		Prepped: ${validateTarget(ns, target)}`);
 	}
 	
+}
+
+function getJob(ns, target, time, end, type){
+	return {
+		port: ns.pid,
+		target: target,
+		time: time,
+		end: end,
+		type: type,
+	};
 }
 
 function validateTarget(ns, target) {
