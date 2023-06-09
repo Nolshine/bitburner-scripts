@@ -8,7 +8,7 @@ export async function main(ns) {
     }
     await ns.weaken(job.target, { additionalMsec: delay });
     const end = Date.now();
-    if (job.type === 'weaken2'){
+    if (job.type === 'weak2'){
         ns.getPortHandle(job.port).write(1);
     }
 }
