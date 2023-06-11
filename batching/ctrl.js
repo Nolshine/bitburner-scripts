@@ -1,27 +1,25 @@
-/** @param {NS} ns */
-
 // proto-batch controller.
 // synchronize a single cycle of HWGW
 
+/** @param {NS} ns */
 export async function main(ns) {
 	// TODO put all variable declarations at the top for readability
 	
 	let port = ns.getPortHandle(ns.pid);
-	port.clear();
 	let target = ns.args[0];
-	let theft_percent;
-	if (ns.args[1]) {
-		theft_percent = ns.args[1];
-	} else {
-		theft_percent = 0.1;
-	}
+	let theft_percent = ns.args[1] ? ns.args[1] : 0.1;
 	let max_cash = ns.getServerMaxMoney(target);
 	let hack_amount = max_cash * theft_percent;
 
+	if (!validateTarget(ns, target)) return;
+
+	port.clear();
+
 	while (true){
-		if(!validateTarget(ns, target)) {
-			ns.tprint(`ERROR: ${target} has not been prepped, or cannot have money.`);
-			ns.exit();
+		if(!isPrepped(ns, target)) {
+			ns.tprint(`WARN: ${target} is not in prepped state.`);
+			await prepTarget(ns, target);
+			continue;
 		};
 		let t_hack = Math.floor(ns.hackAnalyzeThreads(target, hack_amount));
 		let hack_percent = t_hack * ns.hackAnalyze(target);
@@ -57,8 +55,9 @@ export async function main(ns) {
 
 		// make sure we found room for all tasks
 		if (!hack_sv || !grow_sv || !weak1_sv || !weak2_sv){
-			ns.tprint("ERROR: Not enough available RAM on the network for all tasks.");
-			ns.exit();
+			ns.tprint("WARN: Not enough available RAM on the network for all tasks.");
+			await ns.sleep(600000);
+			continue;
 		}
 
 		// synchronization
@@ -100,6 +99,7 @@ export async function main(ns) {
 	
 }
 
+/** @param {NS} ns */
 function getJob(ns, target, time, end, type){
 	return {
 		port: ns.pid,
@@ -110,21 +110,75 @@ function getJob(ns, target, time, end, type){
 	};
 }
 
+/** @param {NS} ns */
 function validateTarget(ns, target) {
 	// make sure the target can have money and has been prepped.
-	let max_cash = ns.getServerMaxMoney(target);
-	if (!(max_cash > 0)){
-		return false;
-	}
-	let cash = ns.getServerMoneyAvailable(target);
-	let sec_level = ns.getServerSecurityLevel(target);
-	let min_sec = ns.getServerMinSecurityLevel(target);
-	if (!(cash == max_cash) || !(sec_level == min_sec)) {
+	let sv = ns.getServer(target);
+	if (!ns.serverExists(target) || sv.moneyMax <= 0 || !sv.hasAdminRights){
+		// invalid target
+		ns.tprint(`ERROR: ${target} is not a valid target.`);
 		return false;
 	}
 	return true;
 }
 
+/** @param {NS} ns */
+function isPrepped(ns, target){
+	let sv = ns.getServer(target);
+	return (
+		sv.moneyAvailable === sv.moneyMax &&
+		sv.hackDifficulty === sv.minDifficulty
+		);
+}
+
+/** @param {NS} ns */
+async function prepTarget(ns, target) {
+	let standby = false;
+	while (true) {
+		if (standby) {
+			standby = !standby;
+			await ns.sleep(1000);
+		}
+
+		let time = ns.getWeakenTime(target);
+		let target_state = ns.getServer(target);
+
+		if (target_state.hackDifficulty > target_state.minDifficulty){
+			let t = Math.ceil((target_state.hackDifficulty - target_state.minDifficulty)/0.05);
+			let sv = findRam(t, getServers(ns));
+			if (!sv) {
+				standby = true;
+				continue;
+			}
+			let job = JSON.stringify(getJob(ns, target, time, Date.now()+time, 'weak'));
+			await ns.sleep(time + 100);
+			ns.exec('weak.js', sv, t, job);
+		} else if (target_state.moneyAvailable < target_state.moneyMax) {
+			let mult = target_state.moneyMax / target_state.moneyAvailable;
+			let tg = Math.ceil(ns.growthAnalyze(target, mult));
+			let tw = Math.ceil(tg/12.5);
+			let network = getServers(ns);
+			let grow_sv = findRam(tg, network);
+			let weak_sv = findRam(tw, network);
+			if (!grow_sv || !weak_sv) {
+				standby = true;
+				continue;
+			}
+			let grow_time = ns.getGrowTime(target);
+			let grow_job = JSON.stringify(getJob(ns, target, grow_time, Date.now() + grow_time, 'grow'));
+			let weak_time = ns.getWeakenTime(target);
+			let weak_job = JSON.stringify(getJob(ns, target, weak_time, Date.now()+weak_time, 'weak'));
+			ns.exec('grow.js', grow_sv, tg, grow_job);
+			ns.exec('weak.js', weak_sv, tw, weak_job);
+			await ns.sleep(weak_time + 100);
+		} else {
+			// target is prepped
+			return;
+		}
+	}
+}
+
+/** @param {NS} ns */
 function getServers(ns){
 	// return an array of servers and threads available on them
 	// traverse first
@@ -145,6 +199,9 @@ function getServers(ns){
 	for (const sv of valid) {
 		let sv_pair = [sv];
 		let ram = ns.getServerMaxRam(sv);
+		if (sv === 'home') {
+			ram -= Math.max(8, ram*0.2);
+		}
 		ram = ram-ns.getServerUsedRam(sv);
 		let t = Math.floor(ram/per_script_ram);
 		sv_pair.push(t);
