@@ -4,10 +4,9 @@
 // TODO: figure out how to make a traversal function available to all scripts?
 // 2) filter for servers with money that are rooted
 // 3) use the moneyMax/minSecurity metric to sort them
-// 4) present best... 10 targets?
 
 export async function main(ns) {
-	ns.tprint(traverse(ns));
+	traverse(ns);
 }
 
 function traverse(ns) {
@@ -36,20 +35,32 @@ function traverse(ns) {
 		return true;
 	})
 
-	return sortTargets(ns, result);
+	let data = {};
+	for (const target of sortTargets(ns, result)){
+		data[target] = `Prepped: ${isPrepped(ns, target)}`;
+	}
+	for (const key of Object.keys(data)){
+		ns.tprint(`${key}: ${isPrepped(ns, key) ? 'Prepped' : 'Not Prepped'}`);
+	}
 }
+
+
+function isPrepped(ns, target){
+	let sv = ns.getServer(target);
+	return ((sv.moneyAvailable >= sv.moneyMax) && (sv.hackDifficulty <= sv.minDifficulty));
+}
+
 
 function sortTargets(ns, targets){
 	// sort valuable targets in order of descending potential value
 	targets.sort((a, b) => {
-		let max_cash_a = ns.getServerMaxMoney(a);
-		let max_cash_b = ns.getServerMaxMoney(b);
-		let min_sec_a = ns.getServerMinSecurityLevel(a);
-		let min_sec_b = ns.getServerMinSecurityLevel(b);
+		let sv_a = ns.getServer(a);
+		let sv_b = ns.getServer(b);
+		
 		// let weak_time_a = ns.getWeakenTime(a);
 		// let weak_time_b = ns.getWeakenTime(b);
-		let metric_a = max_cash_a/min_sec_a;
-		let metric_b = max_cash_b/min_sec_b;
+		let metric_a = sv_a.moneyMax/sv_a.minDifficulty;
+		let metric_b = sv_b.moneyMax/sv_b.minDifficulty;
 		if (metric_a > metric_b){
 			return -1;
 		}
