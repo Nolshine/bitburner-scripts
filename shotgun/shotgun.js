@@ -8,9 +8,10 @@ export async function main(ns) {
 	const servers = traverse(ns);
 	const target = ns.args[0];
 	if (!validateTarget(ns, target)) ns.exit();
-	const greed = 0.4; // TODO automatic optimisation of greed level
+	const greed = 0.5; // TODO automatic optimisation of greed level
 	let ramNet = getRamNet(ns, servers);
 	let port = ns.getPortHandle(ns.pid);
+	let maxBatches = 1000;
 	port.clear();
 
 	const TYPES = ['hack', 'weak1', 'grow', 'weak2'];
@@ -18,15 +19,17 @@ export async function main(ns) {
 
 	while (true) {
 		ramNet.update();
-		let hackTime = ns.getHackTime(target);
-		let growTime = hackTime * 3.2;
-		let weakenTime = hackTime * 4;
-		let timings = [weakenTime - hackTime, 0, weakenTime - growTime, 0];
 
 		if (!isPrepped(ns, target)) {
 			ns.print(`WARN: ${target} is not in a prepped state.`);
 			await prepTarget(ns, target, ramNet, port);
 		}
+
+		let hackTime = ns.getHackTime(target);
+		let growTime = hackTime * 3.2;
+		let weakenTime = hackTime * 4;
+		let timings = [hackTime, weakenTime, growTime, weakenTime];
+		let ends = [0, 5, 10, 15];
 
 		// work out the thread calcs based on the greed
 		let threads = calcThreads(ns, target, greed);
@@ -35,7 +38,7 @@ export async function main(ns) {
 		// work out how many times the batch can fit in the network
 		// TODO: This is probably error prone, need a better method for deciding the limit.
 		// let batchLimit = 30;
-		let batchLimit = Math.min(100, Math.ceil((ramNet.totalSize/1.75)/totalThreads));
+		let batchLimit = Math.min(maxBatches, Math.ceil((ramNet.totalSize / 1.75) / totalThreads));
 		ns.tprint(`Attempting ${batchLimit} groupings superbatch.`)
 		// divvy up ram and scheduling for tasks
 		let tasks = [];
@@ -43,7 +46,6 @@ export async function main(ns) {
 		let abort = false;
 		while (batchNumber <= batchLimit) {
 			let currentBatch = [];
-
 			for (let i = 0; i < 4; i++) {
 				let task = {
 					target: target,
@@ -53,6 +55,7 @@ export async function main(ns) {
 					threads: threads[i],
 					host: ramNet.getHost(threads[i], SCRIPTS[i]),
 					time: timings[i],
+					end: ends[i],
 				};
 				if (!task.host) {
 					ns.print(`Batch #${batchNumber} failed to find RAM, aborting distribution.`);
@@ -63,12 +66,12 @@ export async function main(ns) {
 				currentBatch.push(task);
 			}
 			if (abort) {
-				batchLimit = batchNumber-1; // make sure tasks know the limit has changed.
+				batchLimit = batchNumber - 1; // make sure tasks know the limit has changed.
 				break; // breaks out of while loop without adding latest batch
 			}
 			tasks.push(...currentBatch);
 			batchNumber++;
-			if (batchNumber % 250 === 0) {
+			if (batchNumber % 1000 === 0) {
 				await ns.sleep(1);
 			}
 			// await ns.sleep(1);
@@ -87,16 +90,18 @@ export async function main(ns) {
 				batchLimit: batchLimit,
 				type: task.type,
 				time: task.time,
-				end: Date.now() + task.time,
+				end: Date.now() + weakenTime + task.end,
 				port: ns.pid,
 			});
 			ns.exec(task.script, task.host, task.threads, job);
 			counter++;
-			if (counter % 250 === 0) await ns.sleep(1);
+			await ns.sleep(5);
+			if (counter % 4 === 0) await ns.sleep(10);
 		}
 
 		await port.nextWrite();
 		port.read();
+		await ns.sleep(200); //safety margin
 	}
 }
 
@@ -124,7 +129,7 @@ function isPrepped(ns, target) {
 	return (
 		ns.getServerMoneyAvailable(target) >= ns.getServerMaxMoney(target) &&
 		ns.getServerSecurityLevel(target) <= ns.getServerMinSecurityLevel(target)
-		);
+	);
 }
 
 /** @param {NS} ns */
@@ -132,22 +137,22 @@ async function prepTarget(ns, target, ramNet, port) {
 	port.clear();
 	let minSec = ns.getServerMinSecurityLevel(target);
 	let maxMoney = ns.getServerMaxMoney(target);
-	while (ns.getServerSecurityLevel(target) > minSec){
+	while (ns.getServerSecurityLevel(target) > minSec) {
 		ramNet.update();
 		let time = ns.getWeakenTime(target);
-		let tDesired = Math.ceil((ns.getServerSecurityLevel(target) - minSec)/ns.weakenAnalyze(1));
-		let t = Math.min(tDesired, Math.floor(ramNet.maxHostSize/ns.getScriptRam('weak.js')));
+		let tDesired = Math.ceil((ns.getServerSecurityLevel(target) - minSec) / ns.weakenAnalyze(1));
+		let t = Math.min(tDesired, Math.floor(ramNet.maxHostSize / ns.getScriptRam('weak.js')));
 		let host = ramNet.getHost(t, 'weak.js');
 		ns.scp('weak.js', host, 'home');
 		let job = JSON.stringify({
-				target: target,
-				batchNumber: 0,
-				batchLimit: 0,
-				type: 'pWeak',
-				time: time,
-				end: Date.now() + time,
-				port: ns.pid,
-			});
+			target: target,
+			batchNumber: 0,
+			batchLimit: 0,
+			type: 'pWeak',
+			time: time,
+			end: Date.now() + time,
+			port: ns.pid,
+		});
 		ns.exec('weak.js', host, t, job);
 		await port.nextWrite();
 		port.read();
@@ -160,9 +165,9 @@ async function prepTarget(ns, target, ramNet, port) {
 
 		let mult = maxMoney / ns.getServerMoneyAvailable(target);
 		let tGrowDesired = Math.ceil(ns.growthAnalyze(target, mult));
-		let tGrow = Math.min(tGrowDesired, Math.floor(ramNet.maxHostSize/ns.getScriptRam('grow.js')));
-		let ratio = ns.weakenAnalyze(1)/ns.growthAnalyzeSecurity(1);
-		let tWeaken = Math.ceil(tGrow/ratio);
+		let tGrow = Math.min(tGrowDesired, Math.floor(ramNet.maxHostSize / ns.getScriptRam('grow.js')));
+		let ratio = ns.weakenAnalyze(1) / ns.growthAnalyzeSecurity(1);
+		let tWeaken = Math.ceil(tGrow / ratio);
 		let hostGrow = ramNet.getHost(tGrow, 'grow.js');
 		let hostWeaken = ramNet.getHost(tWeaken, 'weak.js');
 
@@ -170,23 +175,23 @@ async function prepTarget(ns, target, ramNet, port) {
 		ns.scp('weak.js', hostWeaken, 'home');
 
 		let jobGrow = JSON.stringify({
-				target: target,
-				batchNumber: 0,
-				batchLimit: 0,
-				type: 'pGrow',
-				time: growTime,
-				end: Date.now() + growTime,
-				port: ns.pid,
-			});
+			target: target,
+			batchNumber: 0,
+			batchLimit: 0,
+			type: 'pGrow',
+			time: growTime,
+			end: Date.now() + growTime,
+			port: ns.pid,
+		});
 		let jobWeaken = JSON.stringify({
-				target: target,
-				batchNumber: 0,
-				batchLimit: 0,
-				type: 'pWeak',
-				time: weakenTime,
-				end: Date.now() + weakenTime,
-				port: ns.pid,
-			});
+			target: target,
+			batchNumber: 0,
+			batchLimit: 0,
+			type: 'pWeak',
+			time: weakenTime,
+			end: Date.now() + weakenTime,
+			port: ns.pid,
+		});
 		ns.exec('grow.js', hostGrow, tGrow, jobGrow);
 		ns.exec('weak.js', hostWeaken, tWeaken, jobWeaken);
 		await port.nextWrite();
@@ -204,14 +209,14 @@ async function prepTarget(ns, target, ramNet, port) {
  */
 function calcThreads(ns, target, greed) {
 	let maxMoney = ns.getServerMaxMoney(target);
-	let tHack = Math.max(1, Math.round(ns.hackAnalyzeThreads(target, maxMoney*greed)));
-	let hackAmount = ns.hackAnalyze(target)*tHack;
+	let tHack = Math.max(1, Math.round(ns.hackAnalyzeThreads(target, maxMoney * greed)));
+	let hackAmount = ns.hackAnalyze(target) * tHack;
 	// TODO: add formulas implementation later
-	let tGrow = Math.ceil(ns.growthAnalyze(target, maxMoney/(maxMoney-hackAmount)));
-	let hRatio = ns.weakenAnalyze(1)/ns.hackAnalyzeSecurity(1, target);
-	let gRatio = ns.weakenAnalyze(1)/ns.growthAnalyzeSecurity(1, target);
-	let tWeakenHack = Math.ceil(Math.max(1, tHack/hRatio));
-	let tWeakenGrow = Math.ceil(Math.max(1, tGrow/gRatio));
+	let tGrow = Math.ceil(ns.growthAnalyze(target, maxMoney / (maxMoney - hackAmount)));
+	let hRatio = ns.weakenAnalyze(1) / ns.hackAnalyzeSecurity(1, target);
+	let gRatio = ns.weakenAnalyze(1) / ns.growthAnalyzeSecurity(1, target);
+	let tWeakenHack = Math.ceil(Math.max(1, tHack / hRatio));
+	let tWeakenGrow = Math.ceil(Math.max(1, tGrow / gRatio));
 	return [tHack, tWeakenHack, tGrow, tWeakenGrow];
 }
 
@@ -222,7 +227,7 @@ function getRamNet(ns, servers) {
 	ramNet.maxHostSize = 0;
 	ramNet.minHostSize = Infinity;
 	ramNet.totalSize = 0;
-	
+
 	ramNet.ns = ns;
 
 	let filtered = servers.filter((sv) => ns.getServerMaxRam(sv) > 0 && ns.hasRootAccess(sv));
@@ -260,7 +265,7 @@ function getRamNet(ns, servers) {
 		this.totalSize = newTotalSize;
 	};
 
-	ramNet.getHost = function(numThreads, fn) {
+	ramNet.getHost = function (numThreads, fn) {
 		let ns = this.ns;
 		let scriptSize = ns.getScriptRam(fn);
 		let ramReq = numThreads * scriptSize;
