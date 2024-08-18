@@ -77,7 +77,7 @@ function tryPurchase(ns, canBuySize) {
 
 /** @param {NS} ns */
 function getBuySize(ns, minSize) {
-	let money = ns.getPlayer().money;
+	let money = ns.getServerMoneyAvailable('home');
 	// return the maximum size (in RAM) of server I can buy, or zero if I can't.
 	for (let i = 20; i >= minSize; i--) { // start at highest price, going down
 		let ram = Math.pow(2, i);
